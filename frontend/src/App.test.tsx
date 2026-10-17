@@ -1,8 +1,11 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
+import { vi } from 'vitest';
 import App from './App';
 
-jest.mock('./pages/StoryList', () => () => <h1>My Stories</h1>);
+vi.mock('./pages/StoryList', () => ({
+  default: () => <h1>My Stories</h1>,
+}));
 
 test('renders the novel writer home screen', () => {
   render(<App />);

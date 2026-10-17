@@ -4,11 +4,10 @@ API routes for AI generation functionality.
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, sessionmaker
-from typing import Optional
 import json
 
+from api.generation_meta import require_story
 from db.database import get_db
-from models.story import Story
 from schemas.story import OutlineGenerateRequest, OutlineResponse
 from schemas.character import CharacterGenerateRequest, CharacterGenerateResponse
 from schemas.generation import ChapterExpandRequest, ChapterGenerateRequest
@@ -34,10 +33,7 @@ async def generate_outline(
     Returns:
         Generated outline
     """
-    # Verify story exists
-    story = db.query(Story).filter(Story.story_id == story_id).first()
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
+    require_story(db, story_id)
     
     # Generate outline
     generation_service = GenerationService(db)
@@ -74,10 +70,7 @@ async def generate_chapter(
     Returns:
         Generated chapter content (streaming or complete)
     """
-    # Verify story exists
-    story = db.query(Story).filter(Story.story_id == story_id).first()
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
+    require_story(db, story_id)
     
     generation_service = GenerationService(db)
     
@@ -125,9 +118,7 @@ async def expand_chapter(
     db: Session = Depends(get_db),
 ):
     """Expand or refine an existing chapter and preserve its previous revision."""
-    story = db.query(Story).filter(Story.story_id == story_id).first()
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
+    require_story(db, story_id)
 
     service = GenerationService(db)
     try:
@@ -159,10 +150,7 @@ async def generate_characters(
     Returns:
         Generated characters
     """
-    # Verify story exists
-    story = db.query(Story).filter(Story.story_id == story_id).first()
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
+    require_story(db, story_id)
 
     # Generate characters
     generation_service = GenerationService(db)
@@ -192,10 +180,7 @@ async def generate_world_elements(
     Returns:
         Generated world elements
     """
-    # Verify story exists
-    story = db.query(Story).filter(Story.story_id == story_id).first()
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
+    require_story(db, story_id)
 
     # Generate world elements
     generation_service = GenerationService(db)
@@ -228,10 +213,7 @@ async def edit_chapter_content(
     Returns:
         Edited text
     """
-    # Verify story exists
-    story = db.query(Story).filter(Story.story_id == story_id).first()
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
+    story = require_story(db, story_id)
 
     generation_service = GenerationService(db)
 
@@ -344,10 +326,7 @@ async def generate_full_draft(
     Returns:
         Task started confirmation
     """
-    # Verify story exists
-    story = db.query(Story).filter(Story.story_id == story_id).first()
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
+    require_story(db, story_id)
 
     # The request-scoped session is closed after the response. Build a fresh
     # session factory against the same engine for the background task.
@@ -388,108 +367,4 @@ async def generate_full_draft(
         "message": "Full draft generation started",
         "story_id": story_id,
         "status": "in_progress"
-    }
-
-
-@router.get("/providers")
-async def get_ai_providers():
-    """
-    Get information about available AI providers.
-    
-    Returns:
-        Available AI providers and their capabilities
-    """
-    from services.ai_providers import get_available_providers
-    
-    providers = get_available_providers()
-    
-    # Add current provider status
-    from core.config import settings
-    current_provider = settings.ai_provider
-    
-    return {
-        "current_provider": current_provider,
-        "available_providers": providers
-    }
-
-
-@router.get("/providers/status")
-async def check_provider_status():
-    """
-    Check the status of the current AI provider.
-
-    Returns:
-        Provider availability status
-    """
-    from services.ai_providers import create_ai_provider
-    from core.config import settings
-
-    try:
-        provider = create_ai_provider()
-        is_available = await provider.is_available()
-        model_info = provider.get_model_info()
-
-        return {
-            "provider": settings.ai_provider,
-            "available": is_available,
-            "model_info": model_info
-        }
-    except Exception as e:
-        return {
-            "provider": settings.ai_provider,
-            "available": False,
-            "error": str(e)
-        }
-
-
-@router.get("/complexity")
-async def get_complexity_setting():
-    """
-    Get the current novel complexity setting.
-
-    Returns:
-        Current complexity level and available options
-    """
-    from core.config import settings
-
-    return {
-        "current_complexity": settings.novel_complexity,
-        "available_levels": ["simple", "standard", "complex", "literary"],
-        "descriptions": {
-            "simple": "Clear, straightforward storytelling with accessible language",
-            "standard": "Balanced plot and character development with moderate complexity",
-            "complex": "Multi-layered narratives with sophisticated themes and techniques",
-            "literary": "Artistic prose with experimental techniques and deep philosophical themes"
-        }
-    }
-
-
-@router.post("/complexity/{level}")
-async def set_complexity_level(level: str):
-    """
-    Set the novel complexity level.
-
-    Args:
-        level: Complexity level (simple, standard, complex, literary)
-
-    Returns:
-        Confirmation of the new setting
-    """
-    valid_levels = ["simple", "standard", "complex", "literary"]
-
-    if level not in valid_levels:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid complexity level. Must be one of: {', '.join(valid_levels)}"
-        )
-
-    # Note: This changes the setting for the current session only
-    # To persist changes, you'd need to update the .env file or use a database
-    from core.config import settings
-    settings.novel_complexity = level
-
-    return {
-        "message": f"Complexity level set to '{level}'",
-        "new_complexity": level,
-        "note": "This setting applies to new generations only"
     }

@@ -27,7 +27,7 @@ cd frontend
 npm start
 ```
 
-The React development server defaults to http://localhost:3000 and calls the backend at http://localhost:8000. If you intentionally choose different ports, set `REACT_APP_API_URL` for the frontend and include the frontend origin in backend `CORS_ORIGINS`.
+The Vite development server defaults to http://localhost:3000 and calls the backend at http://localhost:8000. If you intentionally choose different ports, set `VITE_API_URL` for the frontend and include the frontend origin in backend `CORS_ORIGINS`.
 
 ## Verification
 
@@ -38,7 +38,7 @@ cd backend
 venv/bin/python -m pytest -q
 
 cd ../frontend
-npm test -- --watchAll=false
+npm test
 npm run build
 ```
 

@@ -93,7 +93,7 @@ Frontend, in another terminal:
 ```bash
 cd frontend
 npm ci
-npm test -- --watchAll=false
+npm test
 npm run build
 npm start
 ```
@@ -121,6 +121,8 @@ Provider choices:
 `COPILOT_GITHUB_TOKEN` is supported for deliberate OAuth/deployment integrations, but it should be supplied by a secret manager or process environment, not committed to `.env`. For a multi-user deployment, follow GitHub's per-user OAuth guidance instead of sharing one personal credential.
 
 ## Generation pipeline
+
+The application entry point is `app:app`. Enhanced chapter generation, multi-pass generation, regeneration, and quality analysis stay on `/api/v1/generate-enhanced`. Provider status and complexity settings are implemented once and mounted on both `/api/v1/generate` and `/api/v1/generate-enhanced`.
 
 The normal workflow is:
 
@@ -150,7 +152,7 @@ Frontend:
 
 ```bash
 cd frontend
-npm test -- --watchAll=false
+npm test
 npm run build
 ```
 
@@ -158,6 +160,7 @@ npm run build
 
 - `backend/.env` is local-only and must remain ignored by Git.
 - Never commit GitHub, OpenAI, or other provider tokens.
+- `backend/ai_novel_app.db` is local runtime state and is gitignored. An earlier revision committed a development database. That copy had no accounts, emails, password hashes, phone numbers, or API keys. It did contain unpublished fiction drafts (premises, character notes, and chapter prose). Untracking the file leaves those blobs in history. Rewrite history only if those drafts should not stay recoverable.
 - If a secret was ever committed in an earlier revision, removing the file from the current branch does not invalidate that secret. Rotate the credential and, if necessary, separately clean repository history.
 - The embedded Copilot session exposes no tools to the model and rejects permission requests.
 
@@ -165,7 +168,7 @@ npm run build
 
 - FastAPI, SQLAlchemy, SQLite, Pydantic
 - GitHub Copilot SDK for Python
-- React 19, TypeScript, Material UI, Create React App
+- React 19, TypeScript, Material UI, Vite
 - React Router 6
 
 The project is licensed under the terms in [LICENSE](LICENSE).

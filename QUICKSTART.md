@@ -52,7 +52,7 @@ Keep `COPILOT_MODEL=auto` for Copilot Student. Optional `openai` and `ollama` fa
 - `No module named ...`: activate `backend/venv` and reinstall `requirements.txt`.
 - Copilot runtime missing: run `python -m copilot download-runtime` inside the backend virtual environment.
 - Copilot authentication failure: sign in to GitHub/Copilot on the host and confirm that account has Copilot access.
-- Port 8000 busy: start Uvicorn with `--port 8001` and set `REACT_APP_API_URL` for the frontend accordingly.
-- Port 3000 busy: Create React App will offer another port; add that origin to `CORS_ORIGINS` before using it.
+- Port 8000 busy: start Uvicorn with `--port 8001` and set `VITE_API_URL` for the frontend accordingly.
+- Port 3000 busy: Vite will try the next port; add that origin to `CORS_ORIGINS` before using it.
 
 Never commit `backend/.env` or credentials.

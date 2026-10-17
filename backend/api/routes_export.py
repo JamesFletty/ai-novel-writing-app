@@ -45,6 +45,8 @@ async def export_story_markdown(
             media_type="text/markdown",
         )
         
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -83,6 +85,8 @@ async def export_story_text(
             media_type="text/plain",
         )
         
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -136,6 +140,8 @@ async def preview_story_export(
             "media_type": media_type
         }
         
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -196,5 +202,7 @@ async def get_export_info(
             "updated_at": story.updated_at.isoformat() if story.updated_at else None
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get export info: {str(e)}")

@@ -83,7 +83,7 @@ def verify(python: Path, npm: str) -> None:
     backend = ROOT / "backend"
     frontend = ROOT / "frontend"
     run([python, "-m", "pytest", "-q"], cwd=backend)
-    run([npm, "test", "--", "--watchAll=false"], cwd=frontend)
+    run([npm, "test"], cwd=frontend)
     run([npm, "run", "build"], cwd=frontend)
 
 

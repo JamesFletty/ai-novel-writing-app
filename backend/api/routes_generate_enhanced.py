@@ -2,51 +2,25 @@
 Enhanced API routes for AI generation functionality.
 
 Updated to use the enhanced generation service for better quality output.
+Provider, complexity, and outline routes live with the standard generation
+API (or the shared provider router) so they are not duplicated here.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 import json
 
+from api.generation_meta import require_story
 from db.database import get_db
-from models.story import Story
-from schemas.story import OutlineGenerateRequest, OutlineResponse
-from schemas.character import CharacterGenerateRequest, CharacterGenerateResponse
+from models.chapter import Chapter
 from schemas.generation import (
     EnhancedChapterGenerateRequest,
     MultiPassGenerateRequest,
     RegenerateChapterRequest,
 )
 from services.enhanced_generation_service import EnhancedGenerationService
-from services.generation_service import GenerationService  # Keep original for fallback
-from core.config import settings
 
 router = APIRouter()
-
-
-@router.post("/stories/{story_id}/outline", response_model=OutlineResponse)
-async def generate_outline(
-    story_id: int,
-    request: OutlineGenerateRequest,
-    db: Session = Depends(get_db)
-):
-    """
-    Generate an outline for a story using enhanced prompting.
-    """
-    # Verify story exists
-    story = db.query(Story).filter(Story.story_id == story_id).first()
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
-    
-    # Use original generation service for outlines (they're already good)
-    generation_service = GenerationService(db)
-    result = await generation_service.generate_outline(
-        story_id=story_id,
-        target_chapters=request.target_chapters,
-        custom_prompt=request.custom_prompt
-    )
-    
-    return result
 
 
 @router.post("/stories/{story_id}/chapters/{chapter_number}")
@@ -59,7 +33,7 @@ async def generate_chapter_enhanced(
 ):
     """
     Generate chapter content using enhanced prompting and quality controls.
-    
+
     Args:
         story_id: ID of the story
         chapter_number: Chapter number to generate
@@ -68,17 +42,14 @@ async def generate_chapter_enhanced(
         quality_check: Whether to perform quality assessment
         stream: Whether to stream the response
         db: Database session
-        
+
     Returns:
         Generated chapter content with metadata
     """
-    # Verify story exists
-    story = db.query(Story).filter(Story.story_id == story_id).first()
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
-    
+    require_story(db, story_id)
+
     enhanced_service = EnhancedGenerationService(db)
-    
+
     if stream:
         # Return streaming response
         async def generate_stream():
@@ -101,23 +72,22 @@ async def generate_chapter_enhanced(
                     "error_type": type(e).__name__
                 }
                 yield f"data: {json.dumps(error_chunk)}\n\n"
-        
+
         return StreamingResponse(
             generate_stream(),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
         )
-    else:
-        # Return complete response
-        result = await enhanced_service.generate_chapter_enhanced(
-            story_id=story_id,
-            chapter_number=chapter_number,
-            custom_prompt=request.custom_prompt,
-            target_word_count=request.target_word_count,
-            stream=False,
-            quality_check=request.quality_check
-        )
-        return result
+
+    result = await enhanced_service.generate_chapter_enhanced(
+        story_id=story_id,
+        chapter_number=chapter_number,
+        custom_prompt=request.custom_prompt,
+        target_word_count=request.target_word_count,
+        stream=False,
+        quality_check=request.quality_check
+    )
+    return result
 
 
 @router.post("/stories/{story_id}/chapters/{chapter_number}/multi-pass")
@@ -129,27 +99,24 @@ async def generate_chapter_multi_pass(
 ):
     """
     Generate chapter using multi-pass approach for highest quality.
-    
+
     This method uses three passes:
     1. Structure and plot beats
     2. Character development and dialogue
     3. Prose refinement and expansion
-    
+
     Takes longer but produces higher quality results.
     """
-    # Verify story exists
-    story = db.query(Story).filter(Story.story_id == story_id).first()
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
-    
+    require_story(db, story_id)
+
     enhanced_service = EnhancedGenerationService(db)
-    
+
     result = await enhanced_service.generate_chapter_multi_pass(
         story_id=story_id,
         chapter_number=chapter_number,
         target_word_count=request.target_word_count
     )
-    
+
     return result
 
 
@@ -161,27 +128,22 @@ async def analyze_chapter_quality(
 ):
     """
     Analyze the quality of an existing chapter.
-    
+
     Returns quality metrics and improvement suggestions.
     """
-    # Verify story exists
-    story = db.query(Story).filter(Story.story_id == story_id).first()
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
-    
-    # Get the chapter
-    from models.chapter import Chapter
+    story = require_story(db, story_id)
+
     chapter = db.query(Chapter).filter(
         Chapter.story_id == story_id,
         Chapter.number == chapter_number
     ).first()
-    
+
     if not chapter or not chapter.content:
         raise HTTPException(status_code=404, detail="Chapter not found or has no content")
-    
+
     enhanced_service = EnhancedGenerationService(db)
     previous_chapters = enhanced_service._get_previous_chapters(story_id, chapter_number)
-    
+
     target_word_count = max(
         1500,
         min(5000, round((story.target_word_count or 50000) / max(story.target_chapters or 20, 1))),
@@ -191,7 +153,7 @@ async def analyze_chapter_quality(
         target_word_count,
         previous_chapters
     )
-    
+
     # Analyze specific issues
     analysis = {
         "quality_score": quality_score,
@@ -201,31 +163,31 @@ async def analyze_chapter_quality(
         "issues": [],
         "suggestions": []
     }
-    
+
     # Check for specific issues
     content_lower = chapter.content.lower()
     banned_phrases = [
         "little did", "unbeknownst", "time seemed to slow", "heart pounded",
         "blood ran cold", "breath caught", "world spun"
     ]
-    
+
     for phrase in banned_phrases:
         if phrase in content_lower:
             analysis["issues"].append(f"Contains clichéd phrase: '{phrase}'")
             analysis["suggestions"].append(f"Remove or rephrase instances of '{phrase}'")
-    
+
     if analysis["word_count"] < 1500:
         analysis["issues"].append("Chapter is too short")
         analysis["suggestions"].append("Expand with more detailed scenes, dialogue, and description")
-    
+
     if analysis["dialogue_count"] < 4:
         analysis["issues"].append("Insufficient dialogue")
         analysis["suggestions"].append("Add more character conversations and interactions")
-    
+
     if analysis["paragraph_count"] < 6:
         analysis["issues"].append("Too few paragraphs - may lack structure")
         analysis["suggestions"].append("Break content into more distinct scenes and moments")
-    
+
     return analysis
 
 
@@ -238,20 +200,17 @@ async def regenerate_chapter_with_feedback(
 ):
     """
     Regenerate a chapter with specific feedback incorporated.
-    
+
     Args:
         story_id: ID of the story
         chapter_number: Chapter number to regenerate
         feedback: Specific feedback on what to improve
         target_word_count: Target word count for regeneration
     """
-    # Verify story exists
-    story = db.query(Story).filter(Story.story_id == story_id).first()
-    if not story:
-        raise HTTPException(status_code=404, detail="Story not found")
-    
+    require_story(db, story_id)
+
     enhanced_service = EnhancedGenerationService(db)
-    
+
     result = await enhanced_service.generate_chapter_enhanced(
         story_id=story_id,
         chapter_number=chapter_number,
@@ -259,79 +218,5 @@ async def regenerate_chapter_with_feedback(
         target_word_count=request.target_word_count,
         quality_check=True
     )
-    
+
     return result
-
-
-# Keep existing endpoints for backwards compatibility
-@router.get("/providers")
-async def get_ai_providers():
-    """Get information about available AI providers."""
-    from services.ai_providers import get_available_providers
-    
-    providers = get_available_providers()
-    current_provider = settings.ai_provider
-    
-    return {
-        "current_provider": current_provider,
-        "available_providers": providers
-    }
-
-
-@router.get("/providers/status")
-async def check_provider_status():
-    """Check the status of the current AI provider."""
-    from services.ai_providers import create_ai_provider
-
-    try:
-        provider = create_ai_provider()
-        is_available = await provider.is_available()
-        model_info = provider.get_model_info()
-
-        return {
-            "provider": settings.ai_provider,
-            "available": is_available,
-            "model_info": model_info
-        }
-    except Exception as e:
-        return {
-            "provider": settings.ai_provider,
-            "available": False,
-            "error": str(e)
-        }
-
-
-@router.get("/complexity")
-async def get_complexity_setting():
-    """Get the current novel complexity setting."""
-    return {
-        "current_complexity": settings.novel_complexity,
-        "available_levels": ["simple", "standard", "complex", "literary"],
-        "descriptions": {
-            "simple": "Clear, straightforward storytelling with accessible language",
-            "standard": "Balanced plot and character development with moderate complexity",
-            "complex": "Multi-layered narratives with sophisticated themes and techniques",
-            "literary": "Artistic prose with experimental techniques and deep philosophical themes"
-        }
-    }
-
-
-@router.post("/complexity/{level}")
-async def set_complexity_level(level: str):
-    """Set the novel complexity level."""
-    valid_levels = ["simple", "standard", "complex", "literary"]
-
-    if level not in valid_levels:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid complexity level. Must be one of: {', '.join(valid_levels)}"
-        )
-
-    # Note: This changes the setting for the current session only
-    settings.novel_complexity = level
-
-    return {
-        "message": f"Complexity level set to '{level}'",
-        "new_complexity": level,
-        "note": "This setting applies to new generations only"
-    }

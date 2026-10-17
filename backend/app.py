@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from core.config import settings
 from db.database import create_tables
+from api.generation_meta import build_provider_router
 from api.routes_story import router as story_router
 from api.routes_character import router as character_router
 from api.routes_world import router as world_router
@@ -54,7 +55,17 @@ app.include_router(character_router, prefix=f"{settings.api_v1_prefix}/character
 app.include_router(world_router, prefix=f"{settings.api_v1_prefix}/world", tags=["world"])
 app.include_router(generate_router, prefix=f"{settings.api_v1_prefix}/generate", tags=["generation"])
 app.include_router(
+    build_provider_router("generate"),
+    prefix=f"{settings.api_v1_prefix}/generate",
+    tags=["generation"],
+)
+app.include_router(
     enhanced_generate_router,
+    prefix=f"{settings.api_v1_prefix}/generate-enhanced",
+    tags=["enhanced-generation"],
+)
+app.include_router(
+    build_provider_router("generate_enhanced"),
     prefix=f"{settings.api_v1_prefix}/generate-enhanced",
     tags=["enhanced-generation"],
 )
